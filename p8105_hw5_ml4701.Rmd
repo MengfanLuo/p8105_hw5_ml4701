@@ -30,7 +30,7 @@ scale_fill_discrete = scale_fill_viridis_d
 
 ### (a) Data loading, description and summary
 
-```{r}
+```{r, message=FALSE}
 homicide_data = read_csv("data/homicide-data.csv",na = c("","Unknown"))
 ```
 
@@ -253,7 +253,7 @@ Using `skim()`, we can see there are 150 rows ad 5 columns, including 4 numeric 
 
 ### Filling in missing values
 
-A function `fill_na_function` is defined to fill `NA` according to the rules defined in the problem. The resulting dataframe after filling is shown below.
+A function `fill_na_function` is defined to fill `NA` according to the rules defined in the problem. The resulting dataframe after filling is shown below. 
 
 ```{r}
 
