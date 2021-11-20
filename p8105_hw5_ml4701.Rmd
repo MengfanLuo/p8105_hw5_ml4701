@@ -114,6 +114,8 @@ baltimore_test %>%
 
 ### (c) Proportion of unsolved homicides in all cities
 
+* My approach
+
 ```{r}
 city_summary %>% 
   filter(city_state != "Tulsa,AL") %>% 
@@ -193,6 +195,47 @@ city_summary %>%
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 ```
 
+
+## Problem 2
+
+### (a) Data loading and tidying
+
+The following dataframe containing data from all participants, including the subject ID, arm, and observations over week1 to week 8.
+
+```{r, message=FALSE}
+dataframe = tibble(
+  filename = list.files(path = "./data/problem2/")
+)
+
+dataframe =  dataframe %>% 
+  mutate(data = map(str_c("data/problem2/",filename),read_csv),
+         filename = str_remove(filename,".csv")) %>% 
+  unnest(data) %>% 
+  separate(filename,into = c("arm","ID"),sep = "_") %>% 
+  relocate(ID)
+
+knitr::kable(dataframe)
+```
+
+### (b) Spaghetti plot of observations on each subject in control arms and experimental arms over weeks
+
+```{r}
+dataframe %>% 
+  pivot_longer(week_1:week_8,names_to = "week", values_to = "values") %>% 
+  mutate(week = str_remove(week,"week_")) %>% 
+  ggplot(aes(x = week, y = values, group = ID, color = ID))+
+  geom_point(alpha = .5)+
+  geom_line(size = .5)+
+  facet_grid(.~arm)+
+  labs(x = "Week", y = "Values",
+       title = "Spaghetti plot of observations on each subject\nin control arms and experimental arms over weeks",
+       color = "Subject ID in each group")
+```
+
+From the above spaghetti plot, there seem to be a larger increase over week in the experimental arm than in the control arm. The values in week 1 is similar in both groups, but in week 8, all participants in experimental arms have larger values than those in control arms.
+
+
+## Problem 3
 
 
 
