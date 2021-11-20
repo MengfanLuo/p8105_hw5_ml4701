@@ -10,6 +10,8 @@ library(tidyverse)
 #library(p8105.datasets)
 #library(leaflet)
 
+
+
 knitr::opts_chunk$set(
   fig.width = 6,
   fig.asp = .6,
@@ -26,4 +28,181 @@ options(
 scale_colour_discrete = scale_colour_viridis_d
 scale_fill_discrete = scale_fill_viridis_d
 ```
+
+
+## Problem 1
+
+### (a) Data loading, description and summary
+
+
+```{r}
+homicide_data = read_csv("data/homicide-data.csv",na = c("","Unknown"))
+```
+
+In the raw data, there are ``r nrow(homicide_data)`` observations and ``r ncol(homicide_data)`` columns. There are `r sum(is.na(homicide_data))` missing values, including 60 lying in variable `lat`, 60 in `lon`, and 2999 in `victim_age`. The variables include 8 character variables `uid`,`victim_last`,`victim_first`,`victim_race`,`victim_sex`,`city`,`state` and `disposition	`, and 4 numeric variables `reported_date`,`victim_age`, `reported_date` and `reported_date`.
+
+`city_state` variable is created to display both city and state information. Total number of homicides and the number of unsolved homicides within a city is summarized in the following table. We notice that "Tulsa,AL" only has 1 total case, and in fact Tulsa is a city in OK rather than AL, which indicate this might be a error in data entry. We remove row with `city_state == "Tulsa,AL"` and keep `city_state == "Tulsa,OK"`.
+
+```{r}
+homicide_data = homicide_data %>% 
+  mutate(city_state = str_c(city,state,sep = ","))
+
+city_summary = homicide_data %>% 
+  mutate(
+    unsolved = case_when(
+      disposition == "Closed by arrest" ~ 0,
+      disposition != "Closed by arrest" ~ 1)
+    ) %>% 
+  group_by(city_state) %>% 
+  summarize(city_total = n(),
+            unsolved_total = sum(unsolved)) %>% 
+  filter(city_state != "Tulsa,AL")
+knitr::kable(city_summary)
+```
+
+### (b) Proportion of unsolved homicides in Baltimore, MD
+
+For the city of Baltimore, MD,  `prop.test` function is used to estimate the proportion of homicides that are unsolved and the output is saved in `baltimore_output`.
+
+* My initial approach:
+
+```{r}
+baltimore_total = city_summary %>%
+  filter(city_state == "Baltimore,MD") %>% 
+  pull(city_total)
+
+baltimore_unsolved = city_summary %>%
+  filter(city_state == "Baltimore,MD") %>% 
+  pull(unsolved_total)
+
+
+baltimore_output = prop.test(baltimore_unsolved,baltimore_total)
+
+
+baltimore_estimate = broom::tidy(baltimore_output) %>% 
+  pull(estimate)
+
+baltimore_conf.low = broom::tidy(baltimore_output) %>% 
+  pull(conf.low)
+
+baltimore_conf.high = broom::tidy(baltimore_output) %>% 
+  pull(conf.high)
+
+baltimore_CI = c(baltimore_conf.low,baltimore_conf.high)
+```
+
+Using broom::tidy on `baltimore_output` to pull the estimated proportion and confidence intervals, we get the estimate is `r baltimore_estimate` and 95% CI is [`r baltimore_CI`].
+
+The proportion of unsolved homicides and the confidence interval for each cities are retrived using the following pipeline, and is shown in the following table.
+
+
+* Revised method:
+
+```{}
+baltimore_summary= city_summary %>% 
+  filter(city_state == "Baltimore,MD")
+
+baltimore_test = prop.test(
+  x = baltimore_summary %>% pull(unsolved_total),
+  n = baltimore_summary %>% pull(city_total)
+)
+
+baltimore_test %>% 
+  broom::tidy()
+```
+
+
+### (c) Proportion of unsolved homicides in all cities
+
+```{r}
+city_summary %>% 
+  filter(city_state != "Tulsa,AL") %>% 
+  mutate(output = map2(unsolved_total,city_total,prop.test),
+         output = map(output,broom::tidy)) %>% 
+  select(city_state,output) %>% 
+  unnest(cols = c(output)) %>% 
+  mutate(prop_unsolved = round(estimate,4),
+    CI = str_c("[",round(conf.low,4),",",round(conf.high,4),"]")) %>% 
+  select(city_state,prop_unsolved,CI) %>% 
+  knitr::kable()
+
+```
+
+
+* Revised approach
+
+```{}
+prop_test_function = function(homicide_summary){
+  homicide_test = prop.test(
+    x = homicide_summary %>% pull(unsolved_total),
+    n = homicide_summary %>% pull(city_total)
+  )
+  return(homicide_test)
+}
+
+results_df = city_summary %>%
+  nest(data = city_total:unsolved_total) %>% 
+  mutate(
+    test_results = map(data,prop_test_function),
+    tidy_results = map(test_results,broom::tidy)
+  ) %>% 
+  select(city_state,tidy_results) %>% 
+  unnest(tidy_results) %>% 
+  select(city_state,estimate,conf.low, conf.high)
+  
+```
+
+### (d) Visualization of estimatied proportion and CIs of unsolved homicides in all cities
+
+Create a plot that shows the estimates and CIs for each city – check out geom_errorbar for a way to add error bars based on the upper and lower limits. Organize cities according to the proportion of unsolved homicides.
+
+* My approach
+
+```{r}
+city_summary %>% 
+  mutate(output = map2(unsolved_total,city_total,prop.test),
+         output = map(output,broom::tidy)) %>% 
+  select(city_state,output) %>% 
+  unnest(cols = c(output)) %>% 
+  select(city_state,estimate,conf.low,conf.high) %>% 
+  mutate(city_state = fct_reorder(city_state,estimate)) %>% 
+  ggplot(aes(x = estimate,y = city_state))+
+  geom_point()+
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high))+
+  labs(
+    title = "Estimatied proportion and CIs of unsolved homicides in all cities",
+    x = "Estimatied proportion of unsolved homicides",
+    y = "City and State"
+  )
+  
+```
+
+* Alternative approach
+
+```{}
+city_summary %>% 
+  mutate(output = map2(unsolved_total,city_total,prop.test),
+         output = map(output,broom::tidy)) %>% 
+  select(city_state,output) %>% 
+  unnest(cols = c(output)) %>% 
+  select(city_state,estimate,conf.low,conf.high) %>% 
+  mutate(city_state = fct_reorder(city_state,estimate)) %>% 
+  ggplot(aes(x = city_state,y = estimate))+
+  geom_point()+
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
 
